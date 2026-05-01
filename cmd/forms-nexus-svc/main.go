@@ -32,9 +32,9 @@ func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 		slog.Error("FAllo al procesar el JSON (posible ataque o malformato)",
 			slog.String("error", err.Error()),
 		)
-		return events.APIGatewayProxyRequest{
-			StatusCod: http.StatusBadGateway,
-			Body:      `{"error": "El formato del JSON es invalido"}`,
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusBadGateway,
+			Body:       `{"error": "El formato del JSON es invalido"}`,
 		}, nil
 	}
 

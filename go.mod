@@ -2,7 +2,10 @@ module github.com/FrenekLopez/forms-nexus
 
 go 1.26.0
 
-require github.com/go-playground/validator/v10 v10.30.2
+require (
+	github.com/aws/aws-lambda-go v1.54.0
+	github.com/go-playground/validator/v10 v10.30.2
+)
 
 require (
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
