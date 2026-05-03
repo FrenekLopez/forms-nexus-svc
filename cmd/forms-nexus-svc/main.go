@@ -14,47 +14,49 @@ import (
 )
 
 func init() {
-	// Configuramos el logger para que la salida sea en formato JSON
+	// Configure the logger to output in JSON format
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 }
 
 func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	slog.Info("Procesando nueva peticion",
+	slog.Info("Processing new request",
 		slog.String("http_method", req.HTTPMethod),
 		slog.String("path", req.Path),
 	)
+
 	var payload validator.FormPayload
 
-	// Combertimos el JSON (que bieene como texto en req.Body) a nuestro struct.
+	// Convert the JSON (which comes as a string in req.Body) into our struct
 	err := json.Unmarshal([]byte(req.Body), &payload)
 	if err != nil {
-		slog.Error("FAllo al procesar el JSON (posible ataque o malformato)",
+		slog.Error("Failed to process JSON (possible malformed input or attack)",
 			slog.String("error", err.Error()),
 		)
 		return events.APIGatewayProxyResponse{
-			StatusCode: http.StatusBadGateway,
-			Body:       `{"error": "El formato del JSON es invalido"}`,
+			StatusCode: http.StatusBadRequest,
+			Body:       `{"error": "Invalid JSON format"}`,
 		}, nil
 	}
 
-	// Llamamos la logica del Spring 1
+	// Call validation logic (Sprint 1)
 	err = payload.Validate()
 	if err != nil {
-		slog.Error("Validacion de campos fallida",
+		slog.Error("Field validation failed",
 			slog.String("error", err.Error()),
-			slog.String("email_intentado", payload.Email),
+			slog.String("attempted_email", payload.Email),
 		)
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusBadRequest,
 			Body:       `{"error": "` + err.Error() + `"}`,
 		}, nil
 	}
-	slog.Info("Formulario validado exitosamente", slog.String("email", payload.Email))
+
+	slog.Info("Form successfully validated", slog.String("email", payload.Email))
 
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusOK,
-		Body:       `{"message": "Formulario procesado correctamente"}`,
+		Body:       `{"message": "Form processed successfully"}`,
 	}, nil
 }
 
