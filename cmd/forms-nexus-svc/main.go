@@ -3,15 +3,26 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 
 	"log/slog"
 
+	"github.com/FrenekLopez/forms-nexus/internal/notifier"
 	"github.com/FrenekLopez/forms-nexus/internal/validator"
+
+	awsSes "github.com/FrenekLopez/forms-nexus/internal/platform/aws/ses"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ses"
 )
+
+type App struct {
+	Notifier notifier.Notifier
+}
 
 func init() {
 	// Configure the logger to output in JSON format
@@ -19,47 +30,46 @@ func init() {
 	slog.SetDefault(logger)
 }
 
-func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	slog.Info("Processing new request",
-		slog.String("http_method", req.HTTPMethod),
-		slog.String("path", req.Path),
-	)
+func (a *App) HandlerRequest(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 
 	var payload validator.FormPayload
 
-	// Convert the JSON (which comes as a string in req.Body) into our struct
-	err := json.Unmarshal([]byte(req.Body), &payload)
-	if err != nil {
-		slog.Error("Failed to process JSON (possible malformed input or attack)",
-			slog.String("error", err.Error()),
-		)
-		return events.APIGatewayProxyResponse{
-			StatusCode: http.StatusBadRequest,
-			Body:       `{"error": "Invalid JSON format"}`,
-		}, nil
+	if err := json.Unmarshal([]byte(req.Body), &payload); err != nil {
+		return events.APIGatewayProxyResponse{StatusCode: 400, Body: `{"error":"Invalid JSON"}`}, nil
 	}
 
-	// Call validation logic (Sprint 1)
-	err = payload.Validate()
-	if err != nil {
-		slog.Error("Field validation failed",
-			slog.String("error", err.Error()),
-			slog.String("attempted_email", payload.Email),
-		)
-		return events.APIGatewayProxyResponse{
-			StatusCode: http.StatusBadRequest,
-			Body:       `{"error": "` + err.Error() + `"}`,
-		}, nil
+	if err := payload.Validate(); err != nil {
+		return events.APIGatewayProxyResponse{StatusCode: 400, Body: `{"error": "Validation failed"}`}, nil
 	}
 
-	slog.Info("Form successfully validated", slog.String("email", payload.Email))
+	if err := a.Notifier.Send(ctx, payload); err != nil {
+		slog.Error("Failed to send notification", "Error", err)
+		return events.APIGatewayProxyResponse{StatusCode: 500, Body: `{"error": "Failed to send email"}`}, nil
+	}
 
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusOK,
-		Body:       `{"message": "Form processed successfully"}`,
+		Body:       `{"message": "Form processed and email sent!"}`,
 	}, nil
 }
 
 func main() {
-	lambda.Start(Handler)
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		log.Fatalf("No se puede cargar AWS config: %v", err)
+	}
+
+	sesClient := ses.NewFromConfig(cfg)
+
+	sesNotifier := &awsSes.SESNotifier{
+		Client:      sesClient,
+		FromAddress: os.Getenv("SES_FROM_ADDRESS"),
+		ToAddress:   os.Getenv("SES_TO_ADDRESS"),
+	}
+
+	app := &App{
+		Notifier: sesNotifier,
+	}
+
+	lambda.Start(app.HandlerRequest)
 }
