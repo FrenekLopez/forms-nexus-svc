@@ -12,7 +12,7 @@ import (
 	"github.com/FrenekLopez/forms-nexus/internal/notifier"
 	"github.com/FrenekLopez/forms-nexus/internal/validator"
 
-	awsSes "github.com/FrenekLopez/forms-nexus/internal/platform/aws/ses"
+	awsSes "github.com/FrenekLopez/forms-nexus/internal/ses"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"

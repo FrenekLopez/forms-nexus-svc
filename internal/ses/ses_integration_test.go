@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	awsSes "github.com/FrenekLopez/forms-nexus/internal/platform/aws/ses"
+	awsSes "github.com/FrenekLopez/forms-nexus/internal/ses"
 	"github.com/FrenekLopez/forms-nexus/internal/validator"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ses"
