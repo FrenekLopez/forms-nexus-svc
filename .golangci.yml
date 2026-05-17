@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  disable-all: true
+  enable:
+    - unused
+    - staticcheck
+    - govet
+    - errcheck
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+
+issues:
+  exclude-use-default: true
