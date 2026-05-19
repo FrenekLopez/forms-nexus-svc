@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	// Make sure this path matches your module name in go.mod
@@ -62,7 +63,11 @@ func (t *TelegramNotifier) Send(ctx context.Context, payload validator.FormPaylo
 	}
 
 	// Always close the response body to prevent resource leaks
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("error closing Telegram response body: %v", closeErr)
+		}
+	}()
 
 	// 5. Check if the request was successful
 	if resp.StatusCode != http.StatusOK {

@@ -1,0 +1,7 @@
+[tools]
+go = "1.26.0"
+golangci-lint = "latest"
+
+[tasks.lint]
+description = "Runs the Go linter across the entire project"
+run = "golangci-lint run ./..."
