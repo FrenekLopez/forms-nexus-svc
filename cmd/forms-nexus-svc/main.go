@@ -10,6 +10,7 @@ import (
 	"log/slog"
 
 	"github.com/FrenekLopez/forms-nexus/internal/notifier"
+	"github.com/FrenekLopez/forms-nexus/internal/platform/aws/dynamodb"
 	"github.com/FrenekLopez/forms-nexus/internal/validator"
 
 	awsSes "github.com/FrenekLopez/forms-nexus/internal/ses"
@@ -22,6 +23,7 @@ import (
 
 type App struct {
 	Notifier notifier.Notifier
+	DbClient *dynamodb.Client
 }
 
 func init() {
@@ -67,8 +69,14 @@ func main() {
 		ToAddress:   os.Getenv("SES_TO_ADDRESS"),
 	}
 
+	dbClient, err := dynamodb.NewClient(context.Background())
+	if err != nil {
+		log.Fatalf("Could not initialize DynamoDB client: &v", err)
+	}
+
 	app := &App{
 		Notifier: sesNotifier,
+		DbClient: dbClient,
 	}
 
 	lambda.Start(app.HandlerRequest)
