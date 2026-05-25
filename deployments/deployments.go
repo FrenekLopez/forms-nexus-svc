@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2integrations"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/constructs-go/constructs/v10"
@@ -24,6 +25,15 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 
 	stack := awscdk.NewStack(scope, &id, &sprops)
 
+	formsTable := awsdynamodb.NewTable(stack, jsii.String("FormsNexusTable"), &awsdynamodb.TableProps{
+		PartitionKey: &awsdynamodb.Attribute{
+			Name: jsii.String("id"),
+			Type: awsdynamodb.AttributeType_STRING,
+		},
+		BillingMode:   awsdynamodb.BillingMode_PAY_PER_REQUEST,
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
+	})
+
 	formsLambda := awslambda.NewFunction(stack, jsii.String("FormsNexusLambda"), &awslambda.FunctionProps{
 		Architecture: awslambda.Architecture_ARM_64(),
 		Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
@@ -31,6 +41,12 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 		Code:         awslambda.AssetCode_FromAsset(jsii.String("../bin"), nil),
 		Timeout:      awscdk.Duration_Seconds(jsii.Number(30)),
 		MemorySize:   jsii.Number(128),
+
+		Environment: &map[string]*string{
+			"DYNAMODB_TABLE_NAME": formsTable.TableName(),
+			"SES_FROM_ADDRESS":    jsii.String(os.Getenv("SECRET_APP_EMAIL")),
+			"SES_TO_ADDRESS":      jsii.String(os.Getenv("SECRET_APP_EMAIL")),
+		},
 	})
 
 	sesPolicyStatement := awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
@@ -40,6 +56,8 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 	})
 
 	formsLambda.AddToRolePolicy(sesPolicyStatement)
+
+	formsTable.Grant(formsLambda, jsii.String("dynamodb:PutItem"))
 
 	lambdaIntegration := awsapigatewayv2integrations.NewHttpLambdaIntegration(
 		jsii.String("FormsLambdaIntegration"),
