@@ -1,5 +1,5 @@
 {
-  "app": "infra.exe",
+"app": "go run .",
   "watch": {
     "include": [
       "**"
