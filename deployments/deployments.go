@@ -46,6 +46,9 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 			"DYNAMODB_TABLE_NAME": formsTable.TableName(),
 			"SES_FROM_ADDRESS":    jsii.String(os.Getenv("SECRET_APP_EMAIL")),
 			"SES_TO_ADDRESS":      jsii.String(os.Getenv("SECRET_APP_EMAIL")),
+			"TELEGRAM_BOT_TOKEN":  jsii.String(os.Getenv("TELEGRAM_BOT_TOKEN")),
+			"TELEGRAM_CHAT_ID":    jsii.String(os.Getenv("TELEGRAM_CHAT_ID")),
+			"DEPLOY_VERSION":      jsii.String("v3"),
 		},
 	})
 

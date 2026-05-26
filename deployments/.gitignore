@@ -5,6 +5,9 @@
 *.so
 *.dylib
 
+# Ignore compiled binaries folder for Go (AWS Lambda)
+bin/
+
 # Test binary, built with `go test -c`
 *.test
 
