@@ -77,7 +77,7 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 
 	awscdk.NewCfnOutput(stack, jsii.String("ApiGatewayUrOutput"), &awscdk.CfnOutputProps{
 		Value:       httpApi.Url(),
-		Description: jsii.String("URL publica para enviar notificaciones via POST"),
+		Description: jsii.String("Public URL to send notifications via POST"),
 	})
 
 	awscdk.Tags_Of(formsLambda).Add(jsii.String("Environment"), jsii.String("Production"), nil)

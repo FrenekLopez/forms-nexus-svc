@@ -58,7 +58,7 @@ func (a *App) HandlerRequest(ctx context.Context, req events.APIGatewayProxyRequ
 func main() {
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
-		log.Fatalf("No se puede cargar AWS config: %v", err)
+		log.Fatalf("Failed to load AWS config: %v", err)
 	}
 
 	sesClient := ses.NewFromConfig(cfg)
