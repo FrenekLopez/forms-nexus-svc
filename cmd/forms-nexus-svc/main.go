@@ -11,9 +11,9 @@ import (
 
 	"github.com/FrenekLopez/forms-nexus/internal/notifier"
 	"github.com/FrenekLopez/forms-nexus/internal/platform/aws/dynamodb"
-	"github.com/FrenekLopez/forms-nexus/internal/validator"
-
+	"github.com/FrenekLopez/forms-nexus/internal/platform/telegram"
 	awsSes "github.com/FrenekLopez/forms-nexus/internal/ses"
+	"github.com/FrenekLopez/forms-nexus/internal/validator"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -22,8 +22,9 @@ import (
 )
 
 type App struct {
-	Notifier notifier.Notifier
-	DbClient *dynamodb.Client
+	EmailNotifier    notifier.Notifier
+	TelegramNotifier notifier.Notifier
+	DbClient         *dynamodb.Client
 }
 
 func init() {
@@ -44,14 +45,29 @@ func (a *App) HandlerRequest(ctx context.Context, req events.APIGatewayProxyRequ
 		return events.APIGatewayProxyResponse{StatusCode: 400, Body: `{"error": "Validation failed"}`}, nil
 	}
 
-	if err := a.Notifier.Send(ctx, payload); err != nil {
+	var activeNotifier notifier.Notifier
+	switch payload.TargetChannel {
+	case "telegram":
+		activeNotifier = a.TelegramNotifier
+	case "email":
+		activeNotifier = a.EmailNotifier
+	default:
+		activeNotifier = a.EmailNotifier
+	}
+
+	if activeNotifier == nil {
+		slog.Error("Selected notifier is not initialized")
+		return events.APIGatewayProxyResponse{StatusCode: 500, Body: `{"error": "Notifier not configured"}`}, nil
+	}
+
+	if err := activeNotifier.Send(ctx, payload); err != nil {
 		slog.Error("Failed to send notification", "Error", err)
-		return events.APIGatewayProxyResponse{StatusCode: 500, Body: `{"error": "Failed to send email"}`}, nil
+		return events.APIGatewayProxyResponse{StatusCode: 500, Body: `{"error": "Failed to send notification"}`}, nil
 	}
 
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusOK,
-		Body:       `{"message": "Form processed and email sent!"}`,
+		Body:       `{"message": "Form processed successfully!"}`,
 	}, nil
 }
 
@@ -62,11 +78,15 @@ func main() {
 	}
 
 	sesClient := ses.NewFromConfig(cfg)
-
 	sesNotifier := &awsSes.SESNotifier{
 		Client:      sesClient,
 		FromAddress: os.Getenv("SES_FROM_ADDRESS"),
 		ToAddress:   os.Getenv("SES_TO_ADDRESS"),
+	}
+
+	telegramNotifier := &telegram.TelegramNotifier{
+		BotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
+		ChatID:   os.Getenv("TELEGRAM_CHAT_ID"),
 	}
 
 	dbClient, err := dynamodb.NewClient(context.Background())
@@ -75,8 +95,9 @@ func main() {
 	}
 
 	app := &App{
-		Notifier: sesNotifier,
-		DbClient: dbClient,
+		EmailNotifier:    sesNotifier,
+		TelegramNotifier: telegramNotifier,
+		DbClient:         dbClient,
 	}
 
 	lambda.Start(app.HandlerRequest)
