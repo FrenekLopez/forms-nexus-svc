@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsssm"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -34,6 +35,11 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 	})
 
+	telegramToken := awsssm.StringParameter_FromStringParameterName(stack, jsii.String("TelegramTokenParam"), jsii.String("TELEGRAM_BOT_TOKEN")).StringValue()
+	telegramChatId := awsssm.StringParameter_FromStringParameterName(stack, jsii.String("TelegramChatParam"), jsii.String("TELEGRAM_CHAT_ID")).StringValue()
+	sesFromAddress := awsssm.StringParameter_FromStringParameterName(stack, jsii.String("SecretEmailParam"), jsii.String("SES_FROM_ADDRESS")).StringValue()
+	sesToAddress := awsssm.StringParameter_FromStringParameterName(stack, jsii.String("SesToParam"), jsii.String("SES_TO_ADDRESS")).StringValue()
+
 	formsLambda := awslambda.NewFunction(stack, jsii.String("FormsNexusLambda"), &awslambda.FunctionProps{
 		Architecture: awslambda.Architecture_ARM_64(),
 		Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
@@ -44,11 +50,11 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 
 		Environment: &map[string]*string{
 			"DYNAMODB_TABLE_NAME": formsTable.TableName(),
-			"SES_FROM_ADDRESS":    jsii.String(os.Getenv("SECRET_APP_EMAIL")),
-			"SES_TO_ADDRESS":      jsii.String(os.Getenv("SECRET_APP_EMAIL")),
-			"TELEGRAM_BOT_TOKEN":  jsii.String(os.Getenv("TELEGRAM_BOT_TOKEN")),
-			"TELEGRAM_CHAT_ID":    jsii.String(os.Getenv("TELEGRAM_CHAT_ID")),
-			"DEPLOY_VERSION":      jsii.String("v3"),
+			"SES_FROM_ADDRESS":    sesFromAddress,
+			"SES_TO_ADDRESS":      sesToAddress,
+			"TELEGRAM_BOT_TOKEN":  telegramToken,
+			"TELEGRAM_CHAT_ID":    telegramChatId,
+			"DEPLOY_VERSION":      jsii.String("v4"),
 		},
 	})
 
@@ -58,7 +64,14 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 		Resources: jsii.Strings("*"),
 	})
 
+	cloudWatchPolicyStatement := awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+		Effect:    awsiam.Effect_ALLOW,
+		Actions:   jsii.Strings("cloudwatch:PutMetricData"),
+		Resources: jsii.Strings("*"),
+	})
+
 	formsLambda.AddToRolePolicy(sesPolicyStatement)
+	formsLambda.AddToRolePolicy(cloudWatchPolicyStatement)
 
 	formsTable.Grant(formsLambda, jsii.String("dynamodb:PutItem"))
 
