@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
-	"net/http"
 	"os"
 
 	"log/slog"
@@ -46,43 +46,71 @@ func init() {
 	cwClient = cloudwatch.NewFromConfig(cfg)
 }
 
-func (a *App) HandlerRequest(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *App) HandlerRequest(ctx context.Context, sqsEvent events.SQSEvent) error {
 
-	var payload validator.FormPayload
+	for _, record := range sqsEvent.Records {
+		var payload validator.FormPayload
 
-	slog.Info("Processing new request...")
+		slog.Info("Processing new message from SQS queue...", slog.String("MessageId", record.MessageId))
 
-	if err := json.Unmarshal([]byte(req.Body), &payload); err != nil {
-		return events.APIGatewayProxyResponse{StatusCode: 400, Body: `{"error":"Invalid JSON"}`}, nil
-	}
+		if err := json.Unmarshal([]byte(record.Body), &payload); err != nil {
+			slog.Error("Invalid JSON in SQS message", slog.String("Error", err.Error()))
+			// Si el JSON viene mal, retornamos el error. SQS lo intentará 3 veces y luego lo mandará a la DLQ.
+			return fmt.Errorf("invalid json: %w", err)
+		}
 
-	if err := payload.Validate(); err != nil {
-		return events.APIGatewayProxyResponse{StatusCode: 400, Body: `{"error": "Validation failed"}`}, nil
-	}
+		if err := payload.Validate(); err != nil {
+			slog.Error("Validation failed for SQS message", slog.String("Error", err.Error()))
+			return fmt.Errorf("validation failed: %w", err)
+		}
 
-	var activeNotifier notifier.Notifier
-	switch payload.TargetChannel {
-	case "telegram":
-		activeNotifier = a.TelegramNotifier
-	case "email":
-		activeNotifier = a.EmailNotifier
-	default:
-		activeNotifier = a.EmailNotifier
-	}
+		var activeNotifier notifier.Notifier
 
-	if activeNotifier == nil {
-		slog.Error("Selected notifier is not initialized")
-		return events.APIGatewayProxyResponse{StatusCode: 500, Body: `{"error": "Notifier not configured"}`}, nil
-	}
+		switch payload.TargetChannel {
+		case "telegram":
+			activeNotifier = a.TelegramNotifier
+		case "email":
+			activeNotifier = a.EmailNotifier
+		default:
+			activeNotifier = a.EmailNotifier
+		}
 
-	if err := activeNotifier.Send(ctx, payload); err != nil {
-		slog.Error("Failed to send notification", "Error", err)
+		if activeNotifier == nil {
+			slog.Error("Selected notifier is not initialized")
+			return fmt.Errorf("Notifier not configured")
+		}
+
+		if err := activeNotifier.Send(ctx, payload); err != nil {
+			slog.Error("Failed to send notification", "Error", err)
+
+			_, cwErr := cwClient.PutMetricData(ctx, &cloudwatch.PutMetricDataInput{
+				Namespace: aws.String("FormsNexus"),
+				MetricData: []types.MetricDatum{
+					{
+						MetricName: aws.String("NotificationErrors"),
+						Value:      aws.Float64(1.0),
+						Unit:       types.StandardUnitCount,
+						Dimensions: []types.Dimension{
+							{
+								Name:  aws.String("TargetChannel"),
+								Value: aws.String(payload.TargetChannel),
+							},
+						},
+					},
+				},
+			})
+			if cwErr != nil {
+				slog.Error("Failed to publish error metric to CloudWatch", slog.String("Error", cwErr.Error()))
+			}
+
+			return fmt.Errorf("Failed to send notification: %w", err)
+		}
 
 		_, cwErr := cwClient.PutMetricData(ctx, &cloudwatch.PutMetricDataInput{
 			Namespace: aws.String("FormsNexus"),
 			MetricData: []types.MetricDatum{
 				{
-					MetricName: aws.String("NotificationErrors"),
+					MetricName: aws.String("NotificationSuccess"),
 					Value:      aws.Float64(1.0),
 					Unit:       types.StandardUnitCount,
 					Dimensions: []types.Dimension{
@@ -95,38 +123,13 @@ func (a *App) HandlerRequest(ctx context.Context, req events.APIGatewayProxyRequ
 			},
 		})
 		if cwErr != nil {
-			slog.Error("Failed to publish error metric to CloudWatch", slog.String("Error", cwErr.Error()))
+			slog.Error("Failed to publish successs metric to CloudWatch", slog.String("Error", cwErr.Error()))
 		}
 
-		return events.APIGatewayProxyResponse{StatusCode: 500, Body: `{"error": "Failed to send notification"}`}, nil
+		slog.Info("Notification processed successfully", slog.String("Channel", payload.TargetChannel))
+
 	}
-
-	_, cwErr := cwClient.PutMetricData(ctx, &cloudwatch.PutMetricDataInput{
-		Namespace: aws.String("FormsNexus"),
-		MetricData: []types.MetricDatum{
-			{
-				MetricName: aws.String("NotificationSuccess"),
-				Value:      aws.Float64(1.0),
-				Unit:       types.StandardUnitCount,
-				Dimensions: []types.Dimension{
-					{
-						Name:  aws.String("TargetChannel"),
-						Value: aws.String(payload.TargetChannel),
-					},
-				},
-			},
-		},
-	})
-	if cwErr != nil {
-		slog.Error("Failed to publish successs metric to CloudWatch", slog.String("Error", cwErr.Error()))
-	}
-
-	slog.Info("Notification processed successfully", slog.String("Channel", payload.TargetChannel))
-
-	return events.APIGatewayProxyResponse{
-		StatusCode: http.StatusOK,
-		Body:       `{"message": "Form processed successfully!"}`,
-	}, nil
+	return nil
 }
 
 func main() {
@@ -149,7 +152,7 @@ func main() {
 
 	dbClient, err := dynamodb.NewClient(context.Background())
 	if err != nil {
-		log.Fatalf("Could not initialize DynamoDB client: &v", err)
+		log.Fatalf("Could not initialize DynamoDB client: %v", err)
 	}
 
 	app := &App{
