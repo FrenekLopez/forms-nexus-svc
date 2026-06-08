@@ -1,22 +1,38 @@
-# Binaries for programs and plugins
+
+# Go - Compiled object files and executables
+/bin/
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-
-# Ignore compiled binaries folder for Go (AWS Lambda)
-bin/
-
-# Test binary, built with `go test -c`
 *.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-# go.sum should be committed
-!go.sum
+# AWS CDK - Infrastructure artifacts
+/deployments/cdk.out/
+/deployments/.cdk.staging/
+/deployments/deployments
+/deployments/deployments.exe
 
-# CDK asset staging directory
-.cdk.staging
-cdk.out
+# IDEs and Editors (VS Code, GoLand, etc.)
+# 
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+# OS Generated Files (Windows & macOS)
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+
+# Environment Variables & Secrets
+.env
+.env.local
