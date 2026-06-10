@@ -1,0 +1,38 @@
+
+# Go - Compiled object files and executables
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# AWS CDK - Infrastructure artifacts
+/deployments/cdk.out/
+/deployments/.cdk.staging/
+/deployments/deployments
+/deployments/deployments.exe
+
+# IDEs and Editors (VS Code, GoLand, etc.)
+# 
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+# OS Generated Files (Windows & macOS)
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+
+# Environment Variables & Secrets
+.env
+.env.local

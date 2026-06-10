@@ -12,6 +12,9 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsssm"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
+
+	"github.com/aws/aws-cdk-go/awscdk/v2/awslambdaeventsources"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awssqs"
 )
 
 type DeploymentsStackProps struct {
@@ -40,11 +43,44 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 	sesFromAddress := awsssm.StringParameter_FromStringParameterName(stack, jsii.String("SecretEmailParam"), jsii.String("SES_FROM_ADDRESS")).StringValue()
 	sesToAddress := awsssm.StringParameter_FromStringParameterName(stack, jsii.String("SesToParam"), jsii.String("SES_TO_ADDRESS")).StringValue()
 
+	// --- SQS MESSAGING INFRASTRUCTURE ---
+
+	// Create the Dead-Letter-Queue (DLQ) for failed menssages.
+	dlq := awssqs.NewQueue(stack, jsii.String("FormsNexusDLQ"), &awssqs.QueueProps{
+		QueueName:       jsii.String("forms-nexus-dlq"),
+		RetentionPeriod: awscdk.Duration_Days(jsii.Number(14)),
+	})
+
+	// Create the Main SQS Queue.
+	mainQueue := awssqs.NewQueue(stack, jsii.String("FormsNexusQueue"), &awssqs.QueueProps{
+		QueueName:         jsii.String("forms-nexus-queue"),
+		VisibilityTimeout: awscdk.Duration_Seconds(jsii.Number(45)),
+		DeadLetterQueue: &awssqs.DeadLetterQueue{
+			MaxReceiveCount: jsii.Number(3),
+			Queue:           dlq,
+		},
+	})
+
+	producerLambda := awslambda.NewFunction(stack, jsii.String("FormsNexusProducerLambda"), &awslambda.FunctionProps{
+		Architecture: awslambda.Architecture_ARM_64(),
+		Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
+		Handler:      jsii.String("bootstrap"),
+
+		Code:       awslambda.AssetCode_FromAsset(jsii.String("../bin/producer"), nil),
+		Timeout:    awscdk.Duration_Seconds(jsii.Number(5)),
+		MemorySize: jsii.Number(128),
+		Environment: &map[string]*string{
+			"QUEUE_URL": mainQueue.QueueUrl(),
+		},
+	})
+
+	mainQueue.GrantSendMessages(producerLambda)
+
 	formsLambda := awslambda.NewFunction(stack, jsii.String("FormsNexusLambda"), &awslambda.FunctionProps{
 		Architecture: awslambda.Architecture_ARM_64(),
 		Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
 		Handler:      jsii.String("bootstrap"),
-		Code:         awslambda.AssetCode_FromAsset(jsii.String("../bin"), nil),
+		Code:         awslambda.AssetCode_FromAsset(jsii.String("../bin/consumer"), nil),
 		Timeout:      awscdk.Duration_Seconds(jsii.Number(30)),
 		MemorySize:   jsii.Number(128),
 
@@ -57,6 +93,12 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 			"DEPLOY_VERSION":      jsii.String("v4"),
 		},
 	})
+
+	// --- LAMBDA EVENT SOURCE MAPPING ---
+	//Configure the Lambda to be triggered by the Main SQS Queue
+	formsLambda.AddEventSource(awslambdaeventsources.NewSqsEventSource(mainQueue, &awslambdaeventsources.SqsEventSourceProps{
+		BatchSize: jsii.Number(5),
+	}))
 
 	sesPolicyStatement := awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
 		Effect:    awsiam.Effect_ALLOW,
@@ -77,7 +119,7 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 
 	lambdaIntegration := awsapigatewayv2integrations.NewHttpLambdaIntegration(
 		jsii.String("FormsLambdaIntegration"),
-		formsLambda,
+		producerLambda,
 		nil,
 	)
 
