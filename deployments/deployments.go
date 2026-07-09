@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awslogs"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsssm"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
@@ -69,6 +70,7 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 		Code:       awslambda.AssetCode_FromAsset(jsii.String("../bin/producer"), nil),
 		Timeout:    awscdk.Duration_Seconds(jsii.Number(5)),
 		MemorySize: jsii.Number(128),
+		LogRetention: awslogs.RetentionDays_ONE_WEEK, 
 		Environment: &map[string]*string{
 			"QUEUE_URL": mainQueue.QueueUrl(),
 		},
@@ -83,6 +85,7 @@ func NewDeploymentsStack(scope constructs.Construct, id string, props *Deploymen
 		Code:         awslambda.AssetCode_FromAsset(jsii.String("../bin/consumer"), nil),
 		Timeout:      awscdk.Duration_Seconds(jsii.Number(30)),
 		MemorySize:   jsii.Number(128),
+		LogRetention: awslogs.RetentionDays_ONE_WEEK,
 
 		Environment: &map[string]*string{
 			"DYNAMODB_TABLE_NAME": formsTable.TableName(),
