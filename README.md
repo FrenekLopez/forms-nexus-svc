@@ -2,7 +2,7 @@
 
 Forms Nexus is a serverless backend service developed in **Go**, designed to process, validate, and route web form notifications to multiple channels (Telegram, Email) in a highly available and scalable manner.
 
-In its current version (v4), the system implements an asynchronous architecture based on the **Producer-Consumer Pattern** to guarantee millisecond response times to the end client and provide fault tolerance against third-party service outages or latency.
+The system implements an asynchronous architecture based on the **Producer-Consumer Pattern** to guarantee millisecond response times to the end client and provide fault tolerance against third-party service outages or latency.
 
 ## 🏗️ AWS Architecture
 
